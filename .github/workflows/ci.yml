@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake openmpi-bin libopenmpi-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build -j
+
+      - name: ctest
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Correctness with mpirun -np 4
+        run: bash tests/run_tests.sh build/test_correctness
+
+      - name: Short benchmark
+        run: |
+          mpirun -np 4 --oversubscribe build/bench -m 1M -o bench.csv
+          cat bench.csv
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench
+          path: bench.csv
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t mpi-allreduce .
+
+      - name: Run ctest in the container
+        run: docker run --rm mpi-allreduce

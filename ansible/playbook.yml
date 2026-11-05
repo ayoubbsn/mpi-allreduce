@@ -1,0 +1,94 @@
+# Install dependencies, build, test and benchmark mpi-allreduce on Debian/Ubuntu hosts.
+#
+#   ansible-playbook -i ansible/inventory.ini ansible/playbook.yml -K
+#
+# Skip the package installation (no sudo needed) with --skip-tags deps.
+# Results are copied back to ansible/results/<host>/.
+- name: Build, test and benchmark mpi-allreduce
+  hosts: mpi_hosts
+  vars:
+    repo_url: https://github.com/ayoubbsn/mpi-allreduce.git
+    repo_version: main
+    project_dir: "{{ ansible_env.HOME }}/mpi-allreduce"
+    build_dir: "{{ project_dir }}/build"
+    bench_nprocs: 4
+    bench_max_bytes: 16M
+    bench_csv: "{{ project_dir }}/results/bench_np{{ bench_nprocs }}_{{ inventory_hostname }}.csv"
+
+  tasks:
+    - name: Check the target is Debian-based
+      ansible.builtin.assert:
+        that: ansible_os_family == "Debian"
+        fail_msg: "this playbook installs packages with apt"
+      tags: [deps]
+
+    - name: Install build and MPI dependencies
+      become: true
+      ansible.builtin.apt:
+        name:
+          - build-essential
+          - cmake
+          - git
+          - openmpi-bin
+          - libopenmpi-dev
+          - python3
+          - python3-matplotlib
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      tags: [deps]
+
+    - name: Get the sources
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ project_dir }}"
+        version: "{{ repo_version }}"
+
+    - name: Configure
+      ansible.builtin.command:
+        cmd: cmake -S {{ project_dir }} -B {{ build_dir }} -DCMAKE_BUILD_TYPE=Release
+      changed_when: false
+
+    - name: Build
+      ansible.builtin.command:
+        cmd: cmake --build {{ build_dir }} -j {{ ansible_processor_vcpus | default(2) }}
+      register: build
+      changed_when: "'Linking' in build.stdout"
+
+    - name: Run ctest
+      ansible.builtin.command:
+        cmd: ctest --output-on-failure
+        chdir: "{{ build_dir }}"
+      register: ctest
+      changed_when: false
+
+    - name: Show test summary
+      ansible.builtin.debug:
+        msg: "{{ ctest.stdout_lines[-3:] }}"
+
+    - name: Create the results directory
+      ansible.builtin.file:
+        path: "{{ project_dir }}/results"
+        state: directory
+        mode: "0755"
+
+    - name: Run the benchmark
+      ansible.builtin.command:
+        cmd: >
+          mpirun -np {{ bench_nprocs }} --oversubscribe
+          {{ build_dir }}/bench -m {{ bench_max_bytes }} -o {{ bench_csv }}
+      changed_when: true
+
+    - name: Plot the benchmark
+      ansible.builtin.command:
+        cmd: python3 {{ project_dir }}/scripts/plot_bench.py {{ bench_csv }}
+      changed_when: true
+
+    - name: Copy the results back
+      ansible.builtin.fetch:
+        src: "{{ item }}"
+        dest: "{{ playbook_dir }}/results/{{ inventory_hostname }}/"
+        flat: true
+      loop:
+        - "{{ bench_csv }}"
+        - "{{ bench_csv | regex_replace('\\.csv$', '.png') }}"
