@@ -34,11 +34,11 @@ set(TEST_NPROCS "1;2;3;4;5;8" CACHE STRING "Process counts used by ctest")
 # Open MPI refuses to start more ranks than cores (and to run as root)
 # unless told otherwise; CI runners often have 2 cores.
 set(MPIEXEC_EXTRA_FLAGS "")
-execute_process(COMMAND ${MPIEXEC_EXECUTABLE} --version
-                OUTPUT_VARIABLE MPIEXEC_VERSION_OUTPUT
-                ERROR_VARIABLE MPIEXEC_VERSION_OUTPUT
-                RESULT_VARIABLE MPIEXEC_VERSION_RESULT)
-if(MPIEXEC_VERSION_OUTPUT MATCHES "Open MPI|OpenRTE")
+include(CheckSymbolExists)
+set(CMAKE_REQUIRED_INCLUDES ${MPI_C_INCLUDE_DIRS})
+check_symbol_exists(OPEN_MPI "mpi.h" HAVE_OPEN_MPI)
+unset(CMAKE_REQUIRED_INCLUDES)
+if(HAVE_OPEN_MPI)
   message(STATUS "Open MPI detected: tests run with --oversubscribe")
   list(APPEND MPIEXEC_EXTRA_FLAGS --oversubscribe)
 endif()

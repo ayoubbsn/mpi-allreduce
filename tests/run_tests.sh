@@ -23,7 +23,7 @@ if [ ! -x "$exe" ]; then
 fi
 
 flags=()
-if mpirun --version 2>&1 | grep -q "Open MPI"; then
+if command -v ompi_info >/dev/null 2>&1 || mpirun --version 2>&1 | grep -q "Open MPI"; then
     flags+=(--oversubscribe)
     if [ "$(id -u)" -eq 0 ]; then
         flags+=(--allow-run-as-root)

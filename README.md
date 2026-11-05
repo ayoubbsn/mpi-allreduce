@@ -74,7 +74,7 @@ The crossover on this machine is therefore around 64 KB. The win at 4 to 8 KB co
 
 ## Prerequisites
 *   CMake (>= 3.12; `ctest --test-dir` needs 3.20)
-*   C11 compiler and an MPI implementation (tested with Open MPI 4.1)
+*   C11 compiler and an MPI implementation (tested with Open MPI 4.1 and 5.0)
 *   Python 3 with `matplotlib` for the plot
 
 ## Quick Start
